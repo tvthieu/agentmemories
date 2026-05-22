@@ -155,9 +155,10 @@ export function registerGovernanceFunction(sdk: ISdk, kv: StateKV): void {
     },
   );
 
-  sdk.registerFunction("mem::audit-query", 
+  sdk.registerFunction("mem::audit-query",
     async (data?: {
       operation?: AuditEntry["operation"];
+      sessionId?: string;
       dateFrom?: string;
       dateTo?: string;
       limit?: number;

@@ -202,6 +202,14 @@ export function detectEmbeddingProvider(
   if (forced) return forced;
 
   if (source["GEMINI_API_KEY"]) return "gemini";
+  // Volcengine (Doubao) uses an OpenAI-compatible API (#439).
+  // When VOLCENGINE_API_KEY is set, configure the OpenAI provider to use it.
+  if (source["VOLCENGINE_API_KEY"]) {
+    process.env["OPENAI_API_KEY"] = process.env["OPENAI_API_KEY"] || source["VOLCENGINE_API_KEY"];
+    process.env["OPENAI_BASE_URL"] = process.env["OPENAI_BASE_URL"] || source["VOLCENGINE_BASE_URL"] || "https://ark.cn-beijing.volces.com/api/coding/v3";
+    process.env["OPENAI_EMBEDDING_MODEL"] = process.env["OPENAI_EMBEDDING_MODEL"] || source["VOLCENGINE_EMBEDDING_MODEL"] || "doubao-embedding-vision";
+    return "openai";
+  }
   if (source["OPENAI_API_KEY"]) return "openai";
   if (source["VOYAGE_API_KEY"]) return "voyage";
   if (source["COHERE_API_KEY"]) return "cohere";

@@ -548,6 +548,7 @@ export interface AuditEntry {
     | "slot_delete"
     | "slot_reflect";
   userId?: string;
+  sessionId?: string;
   functionId: string;
   targetIds: string[];
   details: Record<string, unknown>;

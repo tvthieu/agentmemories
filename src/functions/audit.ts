@@ -39,12 +39,14 @@ export async function recordAudit(
   details: Record<string, unknown> = {},
   qualityScore?: number,
   userId?: string,
+  sessionId?: string,
 ): Promise<AuditEntry> {
   const entry: AuditEntry = {
     id: generateId("aud"),
     timestamp: new Date().toISOString(),
     operation,
     userId,
+    sessionId,
     functionId,
     targetIds,
     details,
@@ -62,9 +64,10 @@ export async function safeAudit(
   details: Record<string, unknown> = {},
   qualityScore?: number,
   userId?: string,
+  sessionId?: string,
 ): Promise<void> {
   try {
-    await recordAudit(kv, operation, functionId, targetIds, details, qualityScore, userId);
+    await recordAudit(kv, operation, functionId, targetIds, details, qualityScore, userId, sessionId);
   } catch (err) {
     try {
       logger.warn("audit write failed", {
@@ -81,6 +84,7 @@ export async function queryAudit(
   kv: StateKV,
   filter?: {
     operation?: AuditEntry["operation"];
+    sessionId?: string;
     dateFrom?: string;
     dateTo?: string;
     limit?: number;
@@ -93,6 +97,9 @@ export async function queryAudit(
 
   if (filter?.operation) {
     entries = entries.filter((e) => e.operation === filter.operation);
+  }
+  if (filter?.sessionId) {
+    entries = entries.filter((e) => e.sessionId === filter.sessionId);
   }
   if (filter?.dateFrom) {
     const from = new Date(filter.dateFrom).getTime();
