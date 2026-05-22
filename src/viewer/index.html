@@ -1723,6 +1723,7 @@
       });
       graphSim.edges = state.graph.edges.slice();
       graphSim.running = true;
+      graphSim.tick = 0;
       graphSim.dragNode = null;
 
       setupGraphInteraction(canvas);
@@ -1901,9 +1902,23 @@
       var edges = graphSim.edges;
       var nodeCount = nodes.length;
       var damping = 0.9;
-      var repulsion = nodeCount > 100 ? 2000 : nodeCount > 50 ? 1200 : 800;
-      var attraction = nodeCount > 100 ? 0.002 : 0.005;
-      var centerGravity = nodeCount > 100 ? 0.005 : 0.01;
+      var repulsion = nodeCount > 500 ? 4000 : nodeCount > 100 ? 2000 : nodeCount > 50 ? 1200 : 800;
+      var attraction = nodeCount > 500 ? 0.001 : nodeCount > 100 ? 0.002 : 0.005;
+      var centerGravity = nodeCount > 500 ? 0.008 : nodeCount > 100 ? 0.005 : 0.01;
+
+      // Alpha decay: simulation cools over time so it always settles (#563)
+      if (!graphSim.tick) graphSim.tick = 0;
+      graphSim.tick++;
+      var maxTicks = nodeCount > 1000 ? 300 : nodeCount > 500 ? 400 : 500;
+      var alpha = Math.max(0, 1 - graphSim.tick / maxTicks);
+      // Node-count-aware velocity cap tightens as graph grows
+      var maxV = nodeCount > 1000 ? 2 : nodeCount > 500 ? 4 : nodeCount > 100 ? 6 : 10;
+
+      if (alpha <= 0) {
+        graphSim.running = false;
+        renderGraph();
+        return;
+      }
 
       var nodeMap = {};
       nodes.forEach(function(n) { nodeMap[n.id] = n; });
@@ -1923,8 +1938,11 @@
         }
         fx -= n.x * centerGravity;
         fy -= n.y * centerGravity;
-        n.vx = (n.vx + fx) * damping;
-        n.vy = (n.vy + fy) * damping;
+        n.vx = (n.vx + fx * alpha) * damping;
+        n.vy = (n.vy + fy * alpha) * damping;
+        // Velocity cap prevents runaway oscillation on dense graphs
+        var speed = Math.sqrt(n.vx * n.vx + n.vy * n.vy);
+        if (speed > maxV) { n.vx = (n.vx / speed) * maxV; n.vy = (n.vy / speed) * maxV; }
       }
 
       edges.forEach(function(e) {
@@ -1934,7 +1952,7 @@
         var dx = t.x - s.x;
         var dy = t.y - s.y;
         var dist = Math.sqrt(dx * dx + dy * dy) || 1;
-        var f = (dist - 100) * attraction;
+        var f = (dist - 100) * attraction * alpha;
         var fx = (dx / dist) * f;
         var fy = (dy / dist) * f;
         if (graphSim.dragNode !== s) { s.vx += fx; s.vy += fy; }

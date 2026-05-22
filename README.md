@@ -839,6 +839,8 @@ npm install @xenova/transformers
 | `memory_timeline` | Chronological observations |
 | `memory_relations` | Query relationship graph |
 | `memory_graph_query` | Knowledge graph traversal |
+| `memory_lesson_save` | Save a lesson with confidence score; auto-reinforces duplicates; decays when unused |
+| `memory_lesson_recall` | Search lessons by query, filtered by confidence and project |
 | `memory_consolidate` | Run 4-tier consolidation |
 | `memory_claude_bridge_sync` | Sync with MEMORY.md |
 | `memory_team_share` | Share with team members |
