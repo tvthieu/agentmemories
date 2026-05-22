@@ -1523,7 +1523,10 @@ export function registerApiTriggers(
       const memories = await kv.list<import("../types.js").Memory>(KV.memories);
       const latest = req.query_params?.["latest"] === "true";
       const filtered = latest ? memories.filter((m) => m.isLatest) : memories;
-      return { status_code: 200, body: { memories: filtered } };
+      const limit = parseOptionalInt(req.query_params?.["limit"]);
+      const offset = parseOptionalInt(req.query_params?.["offset"]) ?? 0;
+      const paginated = limit != null ? filtered.slice(offset, offset + limit) : filtered;
+      return { status_code: 200, body: { memories: paginated, total: filtered.length, offset, limit: limit ?? filtered.length } };
     },
   );
   sdk.registerTrigger({

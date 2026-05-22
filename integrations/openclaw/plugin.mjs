@@ -179,9 +179,24 @@ const plugin = {
       if (!cfg.enabled) return;
       const prompt = typeof event?.prompt === "string" ? event.prompt.trim() : "";
       if (!prompt) return;
+      const sessionId =
+        event.sessionId ||
+        event.sessionKey ||
+        event.runId ||
+        `openclaw-${Date.now()}`;
+      const project = event.cwd || event.projectPath || process.cwd();
+      const userId = event.userId || event.principal || undefined;
+      // Register the session so it appears in the viewer and query surfaces (#522)
+      await client.postJson("/agentmemory/session/start", {
+        sessionId,
+        project,
+        cwd: project,
+        ...(userId ? { userId } : {}),
+      });
       const result = await client.postJson("/agentmemory/smart-search", {
         query: prompt,
         limit: 5,
+        ...(userId ? { userId } : {}),
       });
       const block = formatResults(result?.results || []);
       if (!block) return;
@@ -200,16 +215,23 @@ const plugin = {
         event.sessionKey ||
         event.runId ||
         `openclaw-${Date.now()}`;
+      const project = event.cwd || event.projectPath || process.cwd();
+      const userId = event.userId || event.principal || undefined;
       await client.postJson("/agentmemory/observe", {
         hookType: "post_tool_use",
         sessionId,
+        project,
+        cwd: project,
         timestamp: new Date().toISOString(),
+        ...(userId ? { userId } : {}),
         data: {
           tool_name: "conversation",
           tool_input: userText.slice(0, 1000),
           tool_output: assistantText.slice(0, 4000),
         },
       });
+      // Close the session so status and viewer reflect the completed state (#522)
+      await client.postJson("/agentmemory/session/end", { sessionId });
     });
   },
 };
