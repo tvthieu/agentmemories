@@ -40,7 +40,11 @@ workers:
       enabled: true
       service_name: agentmemory
       exporter: memory
-      sampling_ratio: 1.0
+      # Sampling ratio reduced from 1.0 to break the subscriber-lag → WARN
+      # feedback loop that caused runaway daemon.log.new growth (#519).
+      # At 1.0, every lagged-subscriber WARN was itself logged, feeding the
+      # same backed-up subscriber and pegging CPU at ~99%.
+      sampling_ratio: 0.1
       metrics_enabled: true
       logs_enabled: true
       logs_console_output: true

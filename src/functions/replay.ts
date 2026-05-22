@@ -452,6 +452,13 @@ export function registerReplayFunctions(sdk: ISdk, kv: StateKV): void {
         observations: observationCount,
       });
 
+      // Kick off consolidation pipeline for the imported observations (#518).
+      // Without this, observations land in KV but the compression/consolidation
+      // pipeline never processes them since they arrived outside the live hook flow.
+      if (sessionIds.length > 0) {
+        sdk.triggerVoid("mem::consolidate-pipeline", {});
+      }
+
       return {
         success: true,
         imported: files.length,

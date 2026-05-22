@@ -536,9 +536,24 @@ export function registerApiTriggers(
         };
       }
       const title = typeof body.title === "string" ? body.title.trim() : undefined;
+      // Normalize project to main repo root when cwd is a git worktree (#515).
+      // Worktree paths (e.g. ~/.codex/worktrees/<hash>/my-repo) would otherwise
+      // create a new project identity per worktree, fragmenting context.
+      let canonicalProject = project;
+      try {
+        const wt = await sdk.trigger<
+          { cwd: string },
+          { success: boolean; isWorktree: boolean; mainRepoRoot: string }
+        >({ function_id: "mem::detect-worktree", payload: { cwd } });
+        if (wt.success && wt.isWorktree && wt.mainRepoRoot) {
+          canonicalProject = wt.mainRepoRoot;
+        }
+      } catch {
+        // worktree detection is best-effort; fall back to the caller-supplied project
+      }
       const session: Session = {
         id: sessionId,
-        project,
+        project: canonicalProject,
         cwd,
         startedAt: new Date().toISOString(),
         status: "active",
@@ -1397,6 +1412,9 @@ export function registerApiTriggers(
       const parsedLimit = parseOptionalInt(req.query_params?.["limit"]);
       const entries = await sdk.trigger({ function_id: "mem::audit-query", payload: {
         operation: req.query_params?.["operation"],
+        sessionId: req.query_params?.["sessionId"] || undefined,
+        dateFrom: req.query_params?.["dateFrom"] || undefined,
+        dateTo: req.query_params?.["dateTo"] || undefined,
         limit: parsedLimit ?? 50,
       } });
       return { status_code: 200, body: { entries, success: true } };
