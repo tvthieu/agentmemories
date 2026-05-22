@@ -580,6 +580,17 @@ export function registerApiTriggers(
         { type: "set", path: "endedAt", value: new Date().toISOString() },
         { type: "set", path: "status", value: "completed" },
       ]);
+      if (isGraphExtractionEnabled()) {
+        try {
+          const observations = await kv.list<CompressedObservation>(KV.observations(sessionId));
+          const compressed = observations.filter((o) => o.title);
+          if (compressed.length > 0) {
+            sdk.triggerVoid("mem::graph-extract", { observations: compressed });
+          }
+        } catch {
+          // graph extraction is best-effort
+        }
+      }
       return { status_code: 200, body: { success: true } };
     },
   );
@@ -1252,6 +1263,45 @@ export function registerApiTriggers(
     type: "http",
     function_id: "api::graph-extract",
     config: { api_path: "/agentmemory/graph/extract", http_method: "POST" },
+  });
+
+  sdk.registerFunction("api::graph-build",
+    async (req: ApiRequest<Record<string, unknown>>): Promise<Response> => {
+      const authErr = checkAuth(req, secret);
+      if (authErr) return authErr;
+      if (!isGraphExtractionEnabled()) return graphDisabledResponse();
+      try {
+        const sessions = await kv.list<Session>(KV.sessions);
+        let totalNodes = 0;
+        let totalEdges = 0;
+        const BATCH_SIZE = 50;
+        for (const session of sessions) {
+          const observations = await kv.list<CompressedObservation>(KV.observations(session.id));
+          const compressed = observations.filter((o) => o.title);
+          for (let i = 0; i < compressed.length; i += BATCH_SIZE) {
+            const batch = compressed.slice(i, i + BATCH_SIZE);
+            try {
+              const result = await sdk.trigger<{ observations: CompressedObservation[] }, { nodesAdded?: number; edgesAdded?: number }>({
+                function_id: "mem::graph-extract",
+                payload: { observations: batch },
+              });
+              totalNodes += result.nodesAdded ?? 0;
+              totalEdges += result.edgesAdded ?? 0;
+            } catch {
+              // batch failure is non-fatal; continue with remaining sessions
+            }
+          }
+        }
+        return { status_code: 200, body: { success: true, nodes: totalNodes, edges: totalEdges } };
+      } catch {
+        return graphDisabledResponse();
+      }
+    },
+  );
+  sdk.registerTrigger({
+    type: "http",
+    function_id: "api::graph-build",
+    config: { api_path: "/agentmemory/graph/build", http_method: "POST" },
   });
 
   sdk.registerFunction("api::consolidate-pipeline", 

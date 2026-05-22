@@ -49,6 +49,19 @@ async function main() {
   } catch {
     // summarize is best-effort
   }
+
+  if (sessionId !== "unknown") {
+    try {
+      await fetch(`${REST_URL}/agentmemory/session/end`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({ sessionId }),
+        signal: AbortSignal.timeout(10000),
+      });
+    } catch {
+      // session end is best-effort
+    }
+  }
 }
 
 main();

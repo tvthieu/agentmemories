@@ -7,6 +7,8 @@ import type {
   ProjectProfile,
   MemorySlot,
   Lesson,
+  Insight,
+  SemanticMemory,
 } from "../types.js";
 import { KV } from "../state/schema.js";
 import { StateKV } from "../state/kv.js";
@@ -40,7 +42,7 @@ export function registerContextFunction(
       const budget = data.budget || tokenBudget;
       const blocks: ContextBlock[] = [];
 
-      const [pinnedSlots, profile, lessons] = await Promise.all([
+      const [pinnedSlots, profile, lessons, insights, semanticFacts] = await Promise.all([
         isSlotsEnabled()
           ? listPinnedSlots(kv).catch(() => [] as MemorySlot[])
           : Promise.resolve([] as MemorySlot[]),
@@ -48,6 +50,8 @@ export function registerContextFunction(
           .get<ProjectProfile>(KV.profiles, data.project)
           .catch(() => null),
         kv.list<Lesson>(KV.lessons).catch(() => [] as Lesson[]),
+        kv.list<Insight>(KV.insights).catch(() => [] as Insight[]),
+        kv.list<SemanticMemory>(KV.semantic).catch(() => [] as SemanticMemory[]),
       ]);
 
       const slotContent = renderPinnedContext(pinnedSlots);
@@ -129,6 +133,51 @@ export function registerContextFunction(
           tokens: estimateTokens(lessonsContent),
           recency: mostRecent,
           sourceIds: relevantLessons.map((l) => l.id),
+        });
+      }
+
+      // Insights — produced by consolidation pipeline; surface top project-scoped
+      // ones so agents benefit from curated cross-session patterns (#590).
+      const relevantInsights = insights
+        .filter((ins) => !ins.deleted && (!ins.project || ins.project === data.project))
+        .sort((a, b) => b.confidence - a.confidence)
+        .slice(0, 5);
+
+      if (relevantInsights.length > 0) {
+        const items = relevantInsights
+          .map((ins) => `- (${ins.confidence.toFixed(2)}) ${ins.title}: ${ins.content}`)
+          .join("\n");
+        const insightsContent = `## Key Insights\n${items}`;
+        blocks.push({
+          type: "memory",
+          content: insightsContent,
+          tokens: estimateTokens(insightsContent),
+          recency: relevantInsights.reduce((acc, ins) => {
+            const t = new Date(ins.lastReinforcedAt || ins.updatedAt).getTime();
+            return t > acc ? t : acc;
+          }, 0),
+          sourceIds: relevantInsights.map((ins) => ins.id),
+        });
+      }
+
+      // Semantic facts — distilled from consolidation; rank by confidence × strength (#590).
+      const topSemanticFacts = semanticFacts
+        .sort((a, b) => b.confidence * b.strength - a.confidence * a.strength)
+        .slice(0, 5);
+
+      if (topSemanticFacts.length > 0) {
+        const items = topSemanticFacts
+          .map((f) => `- ${f.fact}`)
+          .join("\n");
+        const semanticContent = `## Semantic Memory\n${items}`;
+        blocks.push({
+          type: "memory",
+          content: semanticContent,
+          tokens: estimateTokens(semanticContent),
+          recency: topSemanticFacts.reduce((acc, f) => {
+            const t = new Date(f.lastAccessedAt || f.updatedAt).getTime();
+            return t > acc ? t : acc;
+          }, 0),
         });
       }
 
